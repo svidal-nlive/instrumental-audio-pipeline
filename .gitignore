@@ -464,6 +464,3 @@ pipeline-data/
 # Temporary files
 *.tmp
 *.temp
-
-# Embedded git repositories (handled separately)
-frontend-dashboard/
