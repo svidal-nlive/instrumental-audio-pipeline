@@ -1,0 +1,23 @@
+# Music Library Organization Service Requirements
+# For organizing finalized files into media server structure
+
+# File and path manipulation (pathlib built-in, shutil built-in)
+# No additional path utilities needed
+
+# Metadata reading
+mutagen>=1.47.0
+
+# Environment and logging
+python-dotenv>=1.0.0
+structlog>=23.0.0
+
+# Service communication
+aiofiles>=23.0.0
+
+# Common utilities
+PyYAML>=6.0.0
+watchdog>=3.0.0
+requests>=2.31.0
+
+# String utilities for filename sanitization
+unidecode>=1.3.0

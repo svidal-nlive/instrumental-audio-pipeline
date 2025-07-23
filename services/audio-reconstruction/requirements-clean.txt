@@ -1,0 +1,28 @@
+# Audio Reconstruction Service Requirements
+# For recombining stems and handling metadata/cover art
+
+# Audio processing and manipulation
+pydub>=0.25.1
+mutagen>=1.47.0
+eyed3>=0.9.7
+
+# Image processing for cover art
+Pillow>=10.0.0
+
+# Audio format support
+soundfile>=0.12.1
+
+# Environment and logging
+python-dotenv>=1.0.0
+structlog>=23.0.0
+
+# Service communication
+aiofiles>=23.0.0
+
+# Common utilities
+PyYAML>=6.0.0
+watchdog>=3.0.0
+requests>=2.31.0
+
+# File system utilities (pathlib is built-in to Python 3.4+)
+# No additional path utilities needed

@@ -1,0 +1,242 @@
+# version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: instrumental-maker-postgres
+    environment:
+      - POSTGRES_DB=instrumental_maker
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./data/db-init:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    networks:
+      - instrumental-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d instrumental_maker"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Redis for caching and job queues
+  redis:
+    image: redis:7-alpine
+    container_name: instrumental-maker-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - instrumental-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Main Backend API
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: instrumental-maker-backend
+    volumes:
+      - ./data:/data
+      - ./backend:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/instrumental_maker
+      - REDIS_URL=redis://redis:6379
+      - PIPELINE_DATA_DIR=/data
+      - INPUT_DIR=/data/input
+      - OUTPUT_DIR=/data/output
+      - LOGS_DIR=/data/logs
+      - MUSIC_LIBRARY_DIR=/data/music-library
+      - STEMS_DIR=/data/stems
+      - ARCHIVE_DIR=/data/archive
+      - ERROR_DIR=/data/error
+      - TEMP_DIR=/data/temp
+      - JOBS_DIR=/data/jobs
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.instrumental-api.rule=Host(`instrumental-api.vectorhost.net`)"
+      - "traefik.http.routers.instrumental-api.entrypoints=websecure"
+      - "traefik.http.routers.instrumental-api.tls=true"
+      - "traefik.http.routers.instrumental-api.tls.certresolver=le"
+      - "traefik.http.services.instrumental-api.loadbalancer.server.port=8000"
+    networks:
+      - web
+      - instrumental-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Dashboard
+  frontend:
+    build:
+      context: ./frontend-dashboard
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://instrumental-api.vectorhost.net
+    container_name: instrumental-maker-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=https://instrumental-api.vectorhost.net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.instrumental.rule=Host(`instrumental.vectorhost.net`)"
+      - "traefik.http.routers.instrumental.entrypoints=websecure"
+      - "traefik.http.routers.instrumental.tls=true"
+      - "traefik.http.routers.instrumental.tls.certresolver=le"
+      - "traefik.http.services.instrumental.loadbalancer.server.port=3000"
+    networks:
+      - web
+      - instrumental-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Spleeter Audio Separation Service
+  spleeter:
+    build:
+      context: .
+      dockerfile: services/spleeter/Dockerfile
+    container_name: instrumental-maker-spleeter
+    environment:
+      - SPLITTER_MODEL=4stems
+      - STEMS_TO_KEEP=drums,bass,other
+      - PUID=1001
+      - PGID=1001
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./data:/pipeline-data
+      - spleeter_models:/home/spleeter/.cache/spleeter
+    networks:
+      - instrumental-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'python splitter.py' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+  # Demucs Audio Separation Service  
+  demucs:
+    build:
+      context: .
+      dockerfile: services/demucs/Dockerfile
+    container_name: instrumental-maker-demucs
+    environment:
+      - SPLITTER_MODEL=htdemucs
+      - STEMS_TO_KEEP=drums,bass,other
+      - PUID=1001
+      - PGID=1001
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./data:/pipeline-data
+      - demucs_models:/home/demucs/.cache/torch
+    networks:
+      - instrumental-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'python splitter.py' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # Music Library Organizer Service
+  music-library:
+    build:
+      context: ./services/music-library
+      dockerfile: Dockerfile
+    container_name: instrumental-maker-music-library
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - MUSIC_LIBRARY_DIR=/data/music-library
+      - OUTPUT_DIR=/data/output
+    volumes:
+      - ./data:/data
+    networks:
+      - instrumental-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'python music_organizer.py' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Audio Reconstruction Service
+  audio-reconstruction:
+    build:
+      context: ./services/audio-reconstruction
+      dockerfile: Dockerfile
+    container_name: instrumental-maker-audio-reconstruction
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - INPUT_DIR=/data/output
+      - OUTPUT_DIR=/data/reconstructed
+    volumes:
+      - ./data:/data
+    networks:
+      - instrumental-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'python audio_reconstructor.py' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  spleeter_models:
+    driver: local
+  demucs_models:
+    driver: local
+
+networks:
+  web:
+    external: true
+  instrumental-network:
+    driver: bridge

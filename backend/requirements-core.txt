@@ -1,0 +1,41 @@
+# Core FastAPI Backend Dependencies - Compatible Versions
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+pydantic>=2.7.0,<3.0.0
+pydantic-settings>=2.0.0,<3.0.0
+python-multipart==0.0.9
+aiofiles==23.2.1
+
+# Database
+sqlalchemy==2.0.25
+alembic==1.13.1
+psycopg2-binary==2.9.9
+
+# Redis
+redis==5.0.1
+
+# HTTP client
+httpx==0.26.0
+
+# System monitoring
+psutil>=5.0.0
+
+# File watching
+watchdog>=3.0.0
+
+# Compatibility
+typing-extensions>=4.8.0
+
+# Validation and security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-decouple==3.8
+
+# Async support
+asyncio-mqtt>=0.16.0
+
+# Logging and monitoring
+structlog>=23.0.0
+
+# Additional dependencies
+PyYAML>=6.0.0

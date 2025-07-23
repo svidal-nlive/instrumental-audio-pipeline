@@ -1,0 +1,21 @@
+# Demucs Audio Processing Service Requirements
+# Using modern audio-separator package which supports Python 3.12 and includes Demucs models
+
+# Modern audio separation with Demucs support
+audio-separator[cpu]==0.35.0
+
+# Audio processing
+pydub==0.25.1
+mutagen==1.47.0
+
+# Environment and logging
+python-dotenv==1.1.1
+structlog>=23.0.0
+
+# Service communication
+aiofiles>=23.0.0
+
+# Common utilities
+PyYAML>=6.0.0
+watchdog>=3.0.0
+requests>=2.25.0
